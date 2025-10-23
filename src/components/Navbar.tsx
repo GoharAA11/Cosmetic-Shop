@@ -1,13 +1,19 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ShoppingBag, User, LogOut, Shield } from 'lucide-react';
 import { useShop } from '@/contexts/ShopContext';
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout, cart } = useShop();
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   return (
     <nav className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
@@ -67,7 +73,7 @@ const Navbar = () => {
                     </Button>
                   </Link>
                 )}
-                <Button variant="ghost" size="icon" onClick={logout}>
+                <Button variant="ghost" size="icon" onClick={handleLogout}>
                   <LogOut className="h-5 w-5" />
                 </Button>
               </>
