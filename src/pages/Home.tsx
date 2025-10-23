@@ -3,36 +3,77 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Sparkles, Heart, Star } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import heroImage from '@/assets/hero-cosmetics.jpg';
+import { useShop } from '@/contexts/ShopContext';
 
 const Home = () => {
+  const { products } = useShop();
+  const featuredProducts = products.slice(0, 3);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary">
       <Navbar />
       
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-20 text-center">
-        <div className="max-w-3xl mx-auto space-y-6">
-          <div className="inline-block">
-            <Sparkles className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-background/95 to-background/70 z-10" />
+        <img 
+          src={heroImage} 
+          alt="Luxury cosmetics" 
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="relative z-20 container mx-auto px-4 py-32 text-center">
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="inline-block">
+              <Sparkles className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
+            </div>
+            <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-4">
+              Գեղեցկության Նոր Աշխարհ
+            </h1>
+            <p className="text-xl text-muted-foreground mb-8">
+              Բացահայտեք բնական գեղեցկությունը մեր պրեմիում կոսմետիկայի հավաքածուով
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Link to="/products">
+                <Button size="lg" className="text-lg px-8">
+                  Գնումներ Սկսել
+                </Button>
+              </Link>
+              <Link to="/about">
+                <Button size="lg" variant="outline" className="text-lg px-8">
+                  Ավելին Իմանալ
+                </Button>
+              </Link>
+            </div>
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-4">
-            Գեղեցկության Նոր Աշխարհ
-          </h1>
-          <p className="text-xl text-muted-foreground mb-8">
-            Բացահայտեք բնական գեղեցկությունը մեր պրեմիում կոսմետիկայի հավաքածուով
-          </p>
-          <div className="flex gap-4 justify-center">
-            <Link to="/products">
-              <Button size="lg" className="text-lg px-8">
-                Գնումներ Սկսել
-              </Button>
+        </div>
+      </section>
+
+      {/* Featured Products */}
+      <section className="container mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold mb-4">Հանրաճանաչ Ապրանքներ</h2>
+          <p className="text-muted-foreground">Հաճախորդների սիրելի ընտրություններ</p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-8 mb-16">
+          {featuredProducts.map((product) => (
+            <Link key={product.id} to="/products">
+              <Card className="overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1">
+                <div className="aspect-square overflow-hidden">
+                  <img 
+                    src={product.image} 
+                    alt={product.name}
+                    className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                  />
+                </div>
+                <CardContent className="p-6">
+                  <h3 className="font-semibold text-lg mb-2">{product.name}</h3>
+                  <p className="text-muted-foreground text-sm mb-4">{product.description}</p>
+                  <p className="text-2xl font-bold text-primary">{product.price.toFixed(2)} ֏</p>
+                </CardContent>
+              </Card>
             </Link>
-            <Link to="/about">
-              <Button size="lg" variant="outline" className="text-lg px-8">
-                Ավելին Իմանալ
-              </Button>
-            </Link>
-          </div>
+          ))}
         </div>
       </section>
 
