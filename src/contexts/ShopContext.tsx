@@ -6,7 +6,7 @@ import {
     fetchCartItems, addToCart as apiAddToCart, 
     removeFromCart as apiRemoveFromCart ,
     checkout
-} from '@/api'; 
+} from '@/api/index'; 
 import { Product as ProductType, User as UserType, CartItem as CartItemType, Category as CategoryType ,CheckoutBody} from '@/types'; 
 
 export type Product = ProductType;

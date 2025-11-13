@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware-ներ
 app.use(cors({
-    origin: 'http://localhost:8080', // Փոխարինել ձեր ֆրոնտենդի հոսթով
+    origin: 'https://cosmetic-shop-1.onrender.com ', // Փոխարինել ձեր ֆրոնտենդի հոսթով
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
 }));
 app.use(express.json()); // Թույլատրում է սերվերին կարդալ JSON մարմինը

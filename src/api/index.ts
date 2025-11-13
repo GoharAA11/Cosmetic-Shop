@@ -3,8 +3,9 @@ import axios from 'axios';
 import { Product, Category, User, CartItem , AdminStats, AddProductData,CheckoutBody} from '../types';
 
 // Սահմանել բեքենդի հասցեն
-const API_BASE_URL = 'http://localhost:5000/api'; // Համապատասխանում է .env ֆայլի PORT-ին
-
+//const API_BASE_URL = 'http://localhost:5000/api'; // Համապատասխանում է .env ֆայլի PORT-ին
+const API_BASE_URL = 'https://cosmetic-shop-sa2n.onrender.com/api';
+;
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {

@@ -10,7 +10,7 @@ import {
     deleteProduct as apiDeleteProduct,
     fetchProducts, // Բերել ապրանքների ցուցակը
     fetchCategories // Բերել կատեգորիաները Add Product Form-ի համար
-} from '@/api'; 
+} from '@/api/index'; 
 import { AdminStats, AddProductData, Product, Category } from '@/types'; 
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
