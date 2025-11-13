@@ -1,249 +1,380 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus } from 'lucide-react';
-import { useShop } from '@/contexts/ShopContext';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useShop } from '@/contexts/ShopContext'; // Օգտագործել user-ին ստուգելու համար
+import { 
+    getAdminStats, 
+    addProduct as apiAddProduct, 
+    deleteProduct as apiDeleteProduct,
+    fetchProducts, // Բերել ապրանքների ցուցակը
+    fetchCategories // Բերել կատեգորիաները Add Product Form-ի համար
+} from '@/api'; 
+import { AdminStats, AddProductData, Product, Category } from '@/types'; 
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { 
+    Form, 
+    FormControl, 
+    FormField, 
+    FormItem, 
+    FormLabel, 
+    FormMessage 
+} from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Trash2 } from 'lucide-react';
+
+// ===================================
+// 1. Zod Schema - Նոր Ապրանքի Ֆորմա
+// ===================================
+const formSchema = z.object({
+    name: z.string().min(2, "Անունը պետք է պարունակի առնվազն 2 նիշ"),
+    price: z.preprocess(
+        (val) => Number(val),
+        z.number().min(0.01, "Գինը պետք է լինի դրական")
+    ),
+    category_slug: z.string().min(1, "Ընտրեք կատեգորիա"),
+    image_url: z.string().url("Նկարի հասցեն պետք է լինի վավեր URL"),
+    description: z.string().min(10, "Նկարագրությունը պետք է պարունակի առնվազն 10 նիշ"),
+});
+
+type NewProductFormValues = z.infer<typeof formSchema>;
 
 const Admin = () => {
-  const navigate = useNavigate();
-  const { products, addProduct, deleteProduct, user } = useShop();
-  const { toast } = useToast();
-  
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    price: '',
-    category: 'skincare',
-    image: '',
-    description: ''
-  });
+    const queryClient = useQueryClient();
+    const { user } = useShop(); // Ստուգում ենք user-ի կարգավիճակը և isAdmin-ը
+    const { toast } = useToast();
+    const [activeTab, setActiveTab] = useState('stats');
 
-  if (!user?.isAdmin) {
-    navigate('/');
-    return null;
-  }
+    // Ստուգում - Եթե user-ը մուտք չի գործել կամ admin չէ
+    if (!user || !user.isAdmin) {
+        return (
+            <div className="min-h-screen bg-background">
+                <Navbar />
+                <div className="container mx-auto px-4 py-8 text-center text-red-500">
+                    Մուտքը մերժված է: Դուք չունեք ադմինիստրատորի իրավունքներ։
+                </div>
+            </div>
+        );
+    }
 
-  const handleAddProduct = (e: React.FormEvent) => {
-    e.preventDefault();
+    // ===================================
+    // 2. React Query Hooks (Admin Տվյալներ)
+    // ===================================
+
+    // Admin Վիճակագրություն
+    const statsQuery = useQuery<AdminStats>({
+        queryKey: ['adminStats'],
+        queryFn: getAdminStats,
+    });
     
-    if (!newProduct.name || !newProduct.price || !newProduct.image || !newProduct.description) {
-      toast({
-        title: 'Սխալ',
-        description: 'Խնդրում ենք լրացնել բոլոր դաշտերը',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    addProduct({
-      name: newProduct.name,
-      price: parseFloat(newProduct.price),
-      category: newProduct.category,
-      image: newProduct.image,
-      description: newProduct.description
+    // Բոլոր Ապրանքները Admin Ցուցակի համար
+    const productsQuery = useQuery<Product[]>({
+        queryKey: ['products'],
+        queryFn: () => fetchProducts(), // Օգտագործել fetchProducts առանց slug-ի
     });
 
-    toast({
-      title: 'Հաջողություն',
-      description: 'Ապրանքը հաջողությամբ ավելացվեց'
+    // Կատեգորիաները ֆորմայի համար
+    const categoriesQuery = useQuery<Category[]>({
+        queryKey: ['categories'],
+        queryFn: fetchCategories,
     });
 
-    setNewProduct({
-      name: '',
-      price: '',
-      category: 'skincare',
-      image: '',
-      description: ''
+    const { 
+        data: categories, 
+        isLoading: isLoadingCategories, 
+        isError: isErrorCategories 
+    } = categoriesQuery;
+
+    // ===================================
+    // 3. Mutations (Փոփոխություններ)
+    // ===================================
+
+    // Նոր Ապրանք Ավելացնել
+    const addProductMutation = useMutation({
+        mutationFn: (data: NewProductFormValues) => apiAddProduct(data as AddProductData),
+        onSuccess: () => {
+            // Թարմացնել ապրանքների ցուցակը և վիճակագրությունը
+            queryClient.invalidateQueries({ queryKey: ['products'] }); 
+            queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+            toast({ title: "Հաջողություն", description: "Նոր ապրանքն ավելացված է:" });
+            form.reset();
+        },
+        onError: (error: any) => {
+            toast({ title: "Սխալ", description: error.message || "Ապրանքը չավելացվեց։", variant: "destructive" });
+        }
     });
-  };
 
-  const handleDeleteProduct = (id: string, name: string) => {
-    if (confirm(`Վստա՞հ եք, որ ուզում եք ջնջել "${name}"-ը`)) {
-      deleteProduct(id);
-      toast({
-        title: 'Ջնջված է',
-        description: `${name} ջնջվել է ցանկից`
-      });
-    }
-  };
+    // Ապրանք Ջնջել
+    const deleteProductMutation = useMutation({
+        mutationFn: (productId: number) => apiDeleteProduct(productId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] }); 
+            queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+            toast({ title: "Հաջողություն", description: "Ապրանքը հաջողությամբ ջնջված է:" });
+        },
+        onError: (error: any) => {
+            toast({ title: "Սխալ", description: error.message || "Ապրանքը չջնջվեց։", variant: "destructive" });
+        }
+    });
 
-  const totalRevenue = products.reduce((sum, p) => sum + p.price, 0);
+    // ===================================
+    // 4. Ֆորմայի Կառավարում
+    // ===================================
+    const form = useForm<NewProductFormValues>({
+        resolver: zodResolver(formSchema),
+        defaultValues: {
+            name: "",
+            price: 0,
+            category_slug: "",
+            image_url: "",
+            description: "",
+        },
+    });
 
-  return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Ադմինի Վահանակ</h1>
-          <p className="text-muted-foreground">Կառավարեք ձեր ապրանքները և հետևեք վաճառքին</p>
+    const onSubmit = (values: NewProductFormValues) => {
+        addProductMutation.mutate(values);
+    };
+
+    const handleDeleteProduct = (productId: number, productName: string) => {
+        if (window.confirm(`Վստա՞հ եք, որ ցանկանում եք ջնջել ${productName}-ը:`)) {
+            deleteProductMutation.mutate(productId);
+        }
+    };
+
+    // ===================================
+    // 5. Կոմպոնենտի Ցուցադրում
+    // ===================================
+    return (
+        <div className="min-h-screen bg-gray-50">
+            <Navbar />
+            <div className="container mx-auto px-4 py-8">
+                <h1 className="text-3xl font-bold mb-6">Ադմինի Վահանակ</h1>
+
+                {/* Tabs Ֆիլտր */}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-8">
+                    <TabsList className="grid w-full max-w-lg mx-auto grid-cols-3">
+                        <TabsTrigger value="stats">Վիճակագրություն</TabsTrigger>
+                        <TabsTrigger value="add">Ավելացնել Ապրանք</TabsTrigger>
+                        <TabsTrigger value="list">Ապրանքների Ցուցակ</TabsTrigger>
+                    </TabsList>
+
+                    {/* ՏԱԲ 1: Վիճակագրություն */}
+                    <TabsContent value="stats">
+                        {statsQuery.isLoading && <div className="text-center py-8">Բեռնում...</div>}
+                        {statsQuery.isError && <div className="text-center py-8 text-red-500">Վիճակագրությունը բեռնել չհաջողվեց</div>}
+                        {statsQuery.data && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="text-lg font-semibold">Ընդհանուր Ապրանքներ</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="text-4xl font-bold text-blue-600">{statsQuery.data.products}</div>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="text-lg font-semibold">Ընդհանուր Պատվերներ</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="text-4xl font-bold text-green-600">{statsQuery.data.orders}</div>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="text-lg font-semibold">Ընդհանուր Վաճառք</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="text-4xl font-bold text-yellow-600">{statsQuery.data.revenue.toFixed(2)} ֏</div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        )}
+                    </TabsContent>
+
+                    {/* ՏԱԲ 2: Ավելացնել Ապրանք */}
+                    <TabsContent value="add">
+                        <Card className="max-w-xl mx-auto mt-6">
+                            <CardHeader>
+                                <CardTitle>Նոր Ապրանքի Ավելացում</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Form {...form}>
+                                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="name"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Անուն</FormLabel>
+                                                    <FormControl><Input placeholder="Ապրանքի անունը" {...field} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="price"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Գին</FormLabel>
+                                                    <FormControl><Input type="number" placeholder="0.00" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="category_slug"
+                                            render={({ field }) => { 
+
+                                                console.log("Field Value:", field.value, "Type:", typeof field.value); 
+                                                            // Console-ում տեսեք, թե ինչ արժեք է ընդունում field.value-ն ընտրելուց հետո
+                                                // Փնտրել ընտրված կատեգորիան
+                                                const selectedCategory = categories?.find(
+                                                   (cat) => String(cat.id) === String(field.value)
+                                              );
+                                              console.log("Selected Category:", selectedCategory);
+                                                            // Console-ում տեսեք, թե արդյոք ճիշտ կատեգորիան է գտնվում
+                                                
+                                                return (
+                                                    <FormItem>
+                                                        <FormLabel>Կատեգորիա</FormLabel>
+                                                        <Select onValueChange={field.onChange} 
+                                                        value={field.value || ""}>
+                                                            <FormControl>
+                                                                <SelectTrigger>
+                                                                  
+                                                                   <SelectValue>
+                                                                    {selectedCategory?.label || "Ընտրեք կատեգորիա"}
+                                                                </SelectValue>
+                                                                   
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                
+                                                                {/* 1. Եթե Բեռնում է, ցուցադրել հաղորդագրություն */}
+                                                                {isLoadingCategories && (
+                                                                    <SelectItem key="loading-status-unique" value="loading" disabled>
+                                                                        Բեռնում...
+                                                                    </SelectItem>
+                                                                )}
+
+                                                                {/* 2. Եթե Բեռնված է, բայց կա Սխալ կամ Կատեգորիաներ չկան */}
+                                                                {!isLoadingCategories && (isErrorCategories || !categories || categories.length === 0) && (
+                                                                    <SelectItem key="empty-error-status" value="empty" disabled>
+                                                                        {isErrorCategories ? "Կատեգորիաների բեռնման սխալ" : "Կատեգորիաներ չկան"}
+                                                                    </SelectItem>
+                                                                )}
+
+                                                                {/* 3. Եթե Տվյալները կան և բեռնումը ավարտված է, ցուցադրել դրանք */}
+                                                                {!isLoadingCategories && categories && categories.length > 0 && !isErrorCategories && (
+                                                                    categories.map(cat => ( 
+                                                                        <SelectItem 
+                                                                            key={cat.id}
+                                                                            value={String(cat.id)} 
+                                                                        >
+                                                                            {cat.label} 
+                                                                        </SelectItem>
+                                                                    ))
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                );
+                                            }}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="image_url"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Նկարի Հասցե (URL)</FormLabel>
+                                                    <FormControl><Input placeholder="http://example.com/image.jpg" {...field} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="description"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Նկարագրություն</FormLabel>
+                                                    <FormControl><Input placeholder="Մանրամասն նկարագրություն" {...field} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <Button 
+                                            type="submit" 
+                                            className="w-full"
+                                            disabled={addProductMutation.isPending}
+                                        >
+                                            {addProductMutation.isPending ? 'Ավելացնում...' : 'Ավելացնել Ապրանք'}
+                                        </Button>
+                                    </form>
+                                </Form>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    
+                    {/* ՏԱԲ 3: Ապրանքների Ցուցակ և Ջնջում */}
+                    <TabsContent value="list">
+                        <Card className="mt-6">
+                            <CardHeader><CardTitle>Ապրանքների Կառավարում</CardTitle></CardHeader>
+                            <CardContent>
+                                {productsQuery.isLoading && <div className="text-center py-4">Ապրանքները բեռնվում են...</div>}
+                                {productsQuery.isError && <div className="text-center py-4 text-red-500">Ապրանքները բեռնել չհաջողվեց</div>}
+                                {productsQuery.data && (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>ID</TableHead>
+                                                <TableHead>Անուն</TableHead>
+                                                <TableHead>Գին</TableHead>
+                                                <TableHead>Կատեգորիա</TableHead>
+                                                <TableHead className="text-right">Գործողություն</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {productsQuery.data.map((product) => (
+                                                <TableRow key={product.id}>
+                                                    <TableCell className="font-medium">{product.id}</TableCell>
+                                                    <TableCell>{product.name}</TableCell>
+                                                    <TableCell>{product.price.toFixed(2)} ֏</TableCell>
+                                                    <TableCell>{product.category || 'N/A'}</TableCell> 
+                                                    <TableCell className="text-right">
+                                                        <Button 
+                                                            variant="destructive" 
+                                                            size="icon"
+                                                            onClick={() => handleDeleteProduct(product.id, product.name)}
+                                                            disabled={deleteProductMutation.isPending}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                </Tabs>
+            </div>
         </div>
-
-        {/* Statistics */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">Ապրանքների Քանակ</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{products.length}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">Ընդհանուր Արժեք</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{totalRevenue.toFixed(2)} ֏</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">Կատեգորիաներ</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">
-                {new Set(products.map(p => p.category)).size}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Add Product Form */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Նոր Ապրանք Ավելացնել
-            </CardTitle>
-            <CardDescription>Լրացրեք դաշտերը նոր ապրանք ավելացնելու համար</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddProduct} className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Անուն</Label>
-                  <Input
-                    id="name"
-                    value={newProduct.name}
-                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                    placeholder="Ապրանքի անուն"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="price">Գին (֏)</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    value={newProduct.price}
-                    onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="category">Կատեգորիա</Label>
-                <Select
-                  value={newProduct.category}
-                  onValueChange={(value) => setNewProduct({ ...newProduct, category: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="skincare">Մաշկի Խնամք</SelectItem>
-                    <SelectItem value="makeup">Մեյքափ</SelectItem>
-                    <SelectItem value="fragrance">Բուրմունք</SelectItem>
-                    <SelectItem value="haircare">Մազերի Խնամք</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="image">Նկարի URL</Label>
-                <Input
-                  id="image"
-                  value={newProduct.image}
-                  onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
-                  placeholder="https://example.com/image.jpg"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Նկարագրություն</Label>
-                <Textarea
-                  id="description"
-                  value={newProduct.description}
-                  onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                  placeholder="Ապրանքի նկարագրություն"
-                  rows={3}
-                />
-              </div>
-
-              <Button type="submit" className="w-full">
-                Ավելացնել Ապրանք
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Products Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Ապրանքների Ցանկ</CardTitle>
-            <CardDescription>Կառավարեք ձեր բոլոր ապրանքները</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Նկար</TableHead>
-                  <TableHead>Անուն</TableHead>
-                  <TableHead>Կատեգորիա</TableHead>
-                  <TableHead>Գին</TableHead>
-                  <TableHead className="text-right">Գործողություններ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {products.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      <img 
-                        src={product.image} 
-                        alt={product.name}
-                        className="w-12 h-12 rounded object-cover"
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>{product.category}</TableCell>
-                    <TableCell>{product.price.toFixed(2)} ֏</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeleteProduct(product.id, product.name)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default Admin;

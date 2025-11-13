@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    // Թիրախային JavaScript տարբերակը (համատեղելի Node.js-ի հետ)
+    "target": "ES2020", 
+    // Մոդուլի համակարգը Node.js-ի համար
+    "module": "CommonJS", 
+    // Որտեղից կարդալ ելակետային ֆայլերը
+    "rootDir": "./src", 
+    // Որտեղ գրել կոմպիլացված JavaScript ֆայլերը
+    "outDir": "./dist", 
+    // Միացնել խիստ (strict) տիպի ստուգումները
+    "strict": true, 
+    // Թույլ տալ ES6 ոճի իմպորտներ CommonJS մոդուլներում
+    "esModuleInterop": true, 
+    // Բոլոր չիմպորտացված մոդուլները դիտարկել որպես "any"
+    "skipLibCheck": true, 
+    // Մոդուլի լուծման ռազմավարությունը
+    "moduleResolution": "node", 
+    // Թույլ տալ JavaScript ֆայլերը մշակել TypeScript-ի կողմից
+    "allowJs": true,
+    // TypeScript-ին թույլ տալ աշխատել Node.js-ի միջավայրի հետ
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  // Նշել, թե որ ֆայլերը պետք է կոմպիլացվեն
+  "include": [
+    "src/**/*"
+  ],
+  // Բացառել node_modules-ը և կոմպիլացիայի թիրախային դիրեկտորիան
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

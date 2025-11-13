@@ -6,7 +6,9 @@ import { useShop } from '@/contexts/ShopContext';
 const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, cart } = useShop();
+  const { user, logout, cartQuery } = useShop();
+  // ԱՊԱՀՈՎՈՒՄ ԵՆՔ, ՈՐ ԶԱՄԲՅՈՒՂԸ ՄԻՇՏ ԶԱՆԳՎԱԾ ԼԻՆԻ
+  const cartItems = cartQuery?.data || [];
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -59,9 +61,9 @@ const Navbar = () => {
                 <Link to="/cart">
                   <Button variant="ghost" size="icon" className="relative">
                     <ShoppingBag className="h-5 w-5" />
-                    {cart.length > 0 && (
+                    {cartItems.length > 0 && (
                       <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {cart.length}
+                        {cartItems.length}
                       </span>
                     )}
                   </Button>

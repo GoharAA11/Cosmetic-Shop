@@ -7,9 +7,21 @@ import heroImage from '@/assets/hero-cosmetics.jpg';
 import { useShop } from '@/contexts/ShopContext';
 
 const Home = () => {
-  const { products } = useShop();
-  const featuredProducts = products.slice(0, 3);
+  const { productsQuery } = useShop();
+  //const featuredProducts = products.slice(0, 3);
+// Բեռնման կարգավիճակը
+  if (productsQuery.isLoading) {
+    return (
+        <div className="min-h-screen bg-background">
+            <Navbar />
+            <div className="container mx-auto px-4 py-8 text-center">Ապրանքները բեռնվում են...</div>
+        </div>
+    );
+  }
 
+  // Ստանալ տվյալները կամ դատարկ զանգված
+  const products = productsQuery.data || [];
+  const featuredProducts = products.slice(0, 3);
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary">
       <Navbar />

@@ -7,40 +7,61 @@ import { ShoppingCart } from 'lucide-react';
 import { useShop } from '@/contexts/ShopContext';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const Products = () => {
-  const { products, addToCart, user } = useShop();
-  const { toast } = useToast();
-  const [activeCategory, setActiveCategory] = useState('all');
+    // Փոխել useShop-ից ստացվող տվյալները
+    const { productsQuery, categoriesQuery, user, addToCartMutation } = useShop(); 
+    const { toast } = useToast();
+    const [activeCategory, setActiveCategory] = useState('all');
 
-  const categories = [
-    { id: 'all', label: 'Բոլորը' },
-    { id: 'skincare', label: 'Մաշկի Խնամք' },
-    { id: 'makeup', label: 'Մեյքափ' },
-    { id: 'fragrance', label: 'Բուրմունք' },
-    { id: 'haircare', label: 'Մազերի Խնամք' }
-  ];
-
-  const filteredProducts = activeCategory === 'all' 
-    ? products 
-    : products.filter(p => p.category === activeCategory);
-
-  const handleAddToCart = (productId: string, productName: string) => {
-    if (!user) {
-      toast({
-        title: 'Մուտք գործեք',
-        description: 'Զամբյուղին ավելացնելու համար անհրաժեշտ է մուտք գործել',
-        variant: 'destructive'
-      });
-      return;
+    // Բեռնման և սխալի մշակում
+    if (productsQuery.isLoading || categoriesQuery.isLoading) {
+        return <div className="min-h-screen bg-background"><Navbar /><div className="container mx-auto px-4 py-8 text-center">Բեռնում...</div></div>;
     }
-    
-    addToCart(productId);
-    toast({
-      title: 'Ավելացված է',
-      description: `${productName} ավելացված է զամբյուղին`
-    });
-  };
+
+    if (productsQuery.error || categoriesQuery.error) {
+         return <div className="min-h-screen bg-background"><Navbar /><div className="container mx-auto px-4 py-8 text-center text-red-500">Սխալ տվյալների բեռնման ժամանակ</div></div>;
+    }
+
+    // Օգտագործել API-ից եկած տվյալները
+    const products = productsQuery.data || [];
+    const categories = categoriesQuery.data || [{ id: 'all', label: 'Բոլորը' }]; // Ապահովել նվազագույն զանգված
+
+    const filteredProducts = activeCategory === 'all' 
+        ? products 
+        : products.filter(p => p.category === activeCategory);
+
+    // Փոխել handleAddToCart ֆունկցիան՝ օգտագործելով mutation
+    const handleAddToCart = async (productId: number, productName: string) => { // Փոխել string-ը number-ի
+        if (!user || !user.user_id) {
+            toast({
+                title: 'Մուտք գործեք',
+                description: 'Զամբյուղին ավելացնելու համար անհրաժեշտ է մուտք գործել',
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        try {
+            await addToCartMutation.mutateAsync({ 
+                userId: user.user_id, 
+                productId: productId, 
+                quantity: 1 // Միշտ ավելացնում ենք 1
+            });
+            
+            toast({
+                title: 'Ավելացված է',
+                description: `${productName} ավելացված է զամբյուղին`
+            });
+        } catch (error: any) {
+            toast({
+                title: 'Սխալ',
+                description: error.message || 'Ապրանքը զամբյուղ չավելացվեց',
+                variant: 'destructive'
+            });
+        }
+    };
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,7 +78,7 @@ const Products = () => {
         <Tabs value={activeCategory} onValueChange={setActiveCategory} className="mb-8">
           <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-5">
             {categories.map(cat => (
-              <TabsTrigger key={cat.id} value={cat.id}>
+              <TabsTrigger key={cat.id} value={cat.id as string}>
                 {cat.label}
               </TabsTrigger>
             ))}
@@ -92,9 +113,10 @@ const Products = () => {
                 <Button 
                   className="w-full gap-2" 
                   onClick={() => handleAddToCart(product.id, product.name)}
+                  disabled={addToCartMutation.isPending}
                 >
                   <ShoppingCart className="w-4 h-4" />
-                  Ավելացնել Զամբյուղ
+                  {addToCartMutation.isPending ? 'Ավելացնում...' : 'Ավելացնել Զամբյուղ'}
                 </Button>
               </CardFooter>
             </Card>

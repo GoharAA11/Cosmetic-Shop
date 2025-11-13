@@ -10,32 +10,37 @@ import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
 
 const Auth = () => {
-  const navigate = useNavigate();
-  const { login, register } = useShop();
-  const { toast } = useToast();
-  
-  const [loginData, setLoginData] = useState({ email: '', password: '' });
-  const [registerData, setRegisterData] = useState({ email: '', password: '', confirmPassword: '' });
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
+ const navigate = useNavigate();
+    // Փոխարինել login/register ֆունկցիաները mutations-ով
+    const { loginMutation, registerMutation } = useShop(); 
+    const { toast } = useToast();
     
-    if (login(loginData.email, loginData.password)) {
-      toast({
-        title: 'Բարի գալուստ',
-        description: 'Դուք հաջողությամբ մուտք եք գործել'
-      });
-      navigate('/');
-    } else {
-      toast({
-        title: 'Սխալ',
-        description: 'Անվավեր էլ․ հասցե կամ գաղտնաբառ',
-        variant: 'destructive'
-      });
-    }
-  };
+    const [loginData, setLoginData] = useState({ email: '', password: '' });
+    const [registerData, setRegisterData] = useState({ email: '', password: '', confirmPassword: '' });
+    
+    // Փոխել handleLogin-ը՝ դարձնելով async
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        try {
+            await loginMutation.mutateAsync(loginData);
+            
+            toast({
+                title: 'Բարի գալուստ',
+                description: 'Դուք հաջողությամբ մուտք եք գործել'
+            });
+            navigate('/');
+        } catch (error: any) {
+            toast({
+                title: 'Սխալ',
+                description: error.message || 'Անվավեր էլ․ հասցե կամ գաղտնաբառ',
+                variant: 'destructive'
+            });
+        }
+    };
 
-  const handleRegister = (e: React.FormEvent) => {
+
+  const handleRegister =async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (registerData.password !== registerData.confirmPassword) {
@@ -56,19 +61,21 @@ const Auth = () => {
       return;
     }
 
-    if (register(registerData.email, registerData.password)) {
-      toast({
-        title: 'Հաջողություն',
-        description: 'Դուք հաջողությամբ գրանցվել եք'
-      });
-      navigate('/');
-    } else {
-      toast({
-        title: 'Սխալ',
-        description: 'Այս էլ․ հասցեն արդեն գրանցված է',
-        variant: 'destructive'
-      });
-    }
+    try {
+            await registerMutation.mutateAsync(registerData);
+            
+            toast({
+                title: 'Հաջողություն',
+                description: 'Դուք հաջողությամբ գրանցվել եք'
+            });
+            navigate('/');
+        } catch (error: any) {
+             toast({
+                title: 'Սխալ',
+                description: error.message || 'Գրանցման սխալ',
+                variant: 'destructive'
+            });
+        }
   };
 
   return (
@@ -111,8 +118,8 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full">
-                    Մուտք Գործել
+                  <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+                    {loginMutation.isPending ? 'Մուտք...' : 'Մուտք Գործել'}
                   </Button>
                   <p className="text-xs text-muted-foreground text-center mt-2">
                     Ադմին հասցե: admin@cosmetic.shop
@@ -153,8 +160,8 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full">
-                    Գրանցվել
+                  <Button type="submit" className="w-full"  disabled={registerMutation.isPending}>
+                    {registerMutation.isPending ? 'Գրանցվում...' : 'Գրանցվել'}
                   </Button>
                 </form>
               </TabsContent>

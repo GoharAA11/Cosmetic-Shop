@@ -11,7 +11,8 @@ import Admin from "./pages/Admin";
 import Cart from "./pages/Cart";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
-
+import { Product, User } from "./types"; 
+import Checkout from './pages/Checkout';
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -23,12 +24,22 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/products" element={<Products />} />
+         <Route
+                path="/products"
+                element={
+                  <Products
+                  
+                  />
+                }
+                />
+  
+
             <Route path="/auth" element={<Auth />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/about" element={<About />} />
             <Route path="*" element={<NotFound />} />
+            <Route path="/checkout" element={<Checkout />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
@@ -37,3 +48,4 @@ const App = () => (
 );
 
 export default App;
+

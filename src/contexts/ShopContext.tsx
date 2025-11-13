@@ -1,205 +1,206 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback,useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { 
+    loginUser, registerUser, 
+    fetchProducts, fetchCategories, 
+    fetchCartItems, addToCart as apiAddToCart, 
+    removeFromCart as apiRemoveFromCart ,
+    checkout
+} from '@/api'; 
+import { Product as ProductType, User as UserType, CartItem as CartItemType, Category as CategoryType ,CheckoutBody} from '@/types'; 
 
-export interface Product {
-  id: string;
-  name: string;
-  price: number;
-  category: string;
-  image: string;
-  description: string;
-}
+export type Product = ProductType;
+export type User = UserType 
+export type CartItem = CartItemType;
 
-interface User {
-  email: string;
-  isAdmin: boolean;
+// Սահմանում ենք Կատեգորիայի Տիպը Context-ի համար
+type CategoryContextItem = { id: string | number; label: string };
+
+// ՈՒՂՂՈՒՄ: Լրացնել loginMutation-ի տեսակը, քանի որ այն վերադարձնում է օգտատիրոջ տվյալներ
+interface LoginResponse {
+    user: User; 
+    message: string;
+    //token: string; // Ենթադրենք նաև token է վերադարձնում
 }
 
 interface ShopContextType {
-  products: Product[];
-  addProduct: (product: Omit<Product, 'id'>) => void;
-  deleteProduct: (id: string) => void;
-  user: User | null;
-  login: (email: string, password: string) => boolean;
-  register: (email: string, password: string) => boolean;
-  logout: () => void;
-  cart: { productId: string; quantity: number }[];
-  addToCart: (productId: string) => void;
-  removeFromCart: (productId: string) => void;
+    // Տվյալների բեռնումը կառավարվում է Query-ով
+    productsQuery: { data: Product[] | undefined; isLoading: boolean; error: unknown };
+    categoriesQuery: {data: CategoryContextItem[]| undefined; isLoading: boolean; error: unknown };
+    cartQuery: { data: CartItem[] | undefined; isLoading: boolean; error: unknown };
+
+    user: User | null;
+    
+    // setUser-ը մնում է, բայց այնուամենայնիվ մենք կօգտագործենք login/logout-ը
+    setUser: React.Dispatch<React.SetStateAction<User | null>>; 
+
+    // Mutations
+    loginMutation: ReturnType<typeof useMutation<LoginResponse, unknown, { email: string, password: string }>>;
+    registerMutation: ReturnType<typeof useMutation>;
+    logout: () => void;
+    addToCartMutation: ReturnType<typeof useMutation>;
+    removeFromCartMutation: ReturnType<typeof useMutation>;
+    checkoutMutation: ReturnType<typeof useMutation<
+        { orderId: number, message: string }, // OnSuccess-ի տեսակը
+        unknown, // Error-ի տեսակը
+        CheckoutBody // MutationFn-ի տեսակը
+    >>;
 }
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
 
-const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: '1',
-    name: 'Rose Glow Serum',
-    price: 45.99,
-    category: 'skincare',
-    image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=500',
-    description: 'Luxurious rose-infused serum for radiant skin'
-  },
-  {
-    id: '2',
-    name: 'Velvet Pink Lipstick',
-    price: 22.50,
-    category: 'makeup',
-    image: 'https://images.unsplash.com/photo-1586495777744-4413f21062fa?w=500',
-    description: 'Long-lasting velvet finish lipstick'
-  },
-  {
-    id: '3',
-    name: 'Blush & Glow Palette',
-    price: 38.00,
-    category: 'makeup',
-    image: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?w=500',
-    description: 'Multi-tone blush palette for all skin types'
-  },
-  {
-    id: '4',
-    name: 'Hydrating Face Cream',
-    price: 52.00,
-    category: 'skincare',
-    image: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=500',
-    description: '24-hour moisture lock face cream'
-  },
-  {
-    id: '5',
-    name: 'Rose Petal Perfume',
-    price: 68.00,
-    category: 'fragrance',
-    image: 'https://images.unsplash.com/photo-1541643600914-78b084683601?w=500',
-    description: 'Delicate floral fragrance with rose notes'
-  },
-  {
-    id: '6',
-    name: 'Silk Hair Serum',
-    price: 28.50,
-    category: 'haircare',
-    image: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=500',
-    description: 'Nourishing serum for smooth, shiny hair'
-  }
-];
+// --------------------------------------------------------------------------------------
+// Ֆունկցիա՝ Session Storage-ից օգտատիրոջ տվյալները բերելու համար (ՄԻԱՅՆ ԿԱՐԴԱԼ)
+const getStoredUser = (): User | null => {
+    const storedUser = sessionStorage.getItem('user');
+    if (storedUser) {
+        try {
+            // Կարևոր է: Համոզվեք, որ այն դարձնում եք User տեսակ
+            return JSON.parse(storedUser) as User; 
+        } catch (e) {
+            console.error("Failed to parse user from Session Storage", e);
+            sessionStorage.removeItem('user');
+            return null;
+        }
+    }
+    return null;
+};
+// --------------------------------------------------------------------------------------
+
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
-
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const [cart, setCart] = useState<{ productId: string; quantity: number }[]>(() => {
-    const saved = localStorage.getItem('cart');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('products', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('user');
-    }
-  }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cart));
-  }, [cart]);
-
-  const addProduct = (product: Omit<Product, 'id'>) => {
-    const newProduct = {
-      ...product,
-      id: Date.now().toString()
-    };
-    setProducts([...products, newProduct]);
-  };
-
-  const deleteProduct = (id: string) => {
-    setProducts(products.filter(p => p.id !== id));
-  };
-
-  const login = (email: string, password: string) => {
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const foundUser = users.find((u: any) => u.email === email && u.password === password);
+    const queryClient = useQueryClient();
     
-    if (foundUser) {
-      setUser({ email: foundUser.email, isAdmin: foundUser.isAdmin });
-      return true;
-    }
-    return false;
-  };
+    // 1. Օգտագործել getStoredUser՝ սկզբնական վիճակը սահմանելու համար
+    const [user, setUser] = useState<User | null>(getStoredUser);
 
-  const register = (email: string, password: string) => {
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
+
+    // 2. AUTH MUTATIONS (Փոփոխություններ)
+    const loginMutation = useMutation({
+        mutationFn: ({ email, password }: { email: string, password: string }) => loginUser(email, password),
+        onSuccess: (data: LoginResponse) => {
+            // Սահմանել user-ին հաջող մուտքից հետո
+            setUser(data.user); 
+            // Պահպանել user-ի տվյալները Session Storage-ում
+            sessionStorage.setItem('user', JSON.stringify(data.user)); 
+            
+            // Թարմացնել զամբյուղը նոր user-ի համար
+            queryClient.invalidateQueries({ queryKey: ['cart', data.user.user_id] }); 
+        },
+    });
+
+    const registerMutation = useMutation({
+        mutationFn: ({ email, password }: { email: string, password: string }) => registerUser(email, password),
+        onSuccess: (data: LoginResponse) => {
+             // Սահմանել user-ին հաջող գրանցումից հետո
+            setUser(data.user);
+            // Պահպանել user-ի տվյալները Session Storage-ում
+            sessionStorage.setItem('user', JSON.stringify(data.user)); 
+            queryClient.invalidateQueries({ queryKey: ['cart', data.user.user_id] });
+        },
+    });
+
+    const logout = useCallback(() => {
+        setUser(null);
+        sessionStorage.removeItem('user'); // Ջնջել Session Storage-ից
+        queryClient.setQueryData(['cart'], []); // Մաքրել զամբյուղի cache-ը
+        // Կարևոր է: Ավելացնել ցանկացած այլ անհրաժեշտ մաքրում (օրինակ՝ token-ի ջնջում)
+    }, [queryClient]);
     
-    if (users.find((u: any) => u.email === email)) {
-      return false;
-    }
+    // 3. Մնացած Queries և Mutations-ը մնում են նույնը
+    
+    // 1. PRODUCTS QUERY
+    const productsQuery = useQuery({
+        queryKey: ['products'],
+        queryFn: () => fetchProducts(),
+    });
 
-    const newUser = {
-      email,
-      password,
-      isAdmin: email === 'admin@cosmetic.shop'
-    };
+    // 2. CATEGORIES QUERY
+    const categoriesQuery = useQuery({
+        queryKey: ['categories'],
+        queryFn: async () => {
+            const data = await fetchCategories();
+             // Փոխակերպում CategoryType-ից CategoryContextItem-ի 
+            /*const mappedCategories: CategoryContextItem[] = (data as CategoryType[]).map((cat) => ({
+                id: cat.slug, 
+                label: cat.name,
+            }));*/
+            const fetchedCategories = (data || []) as CategoryContextItem[];
 
-    users.push(newUser);
-    localStorage.setItem('users', JSON.stringify(users));
-    setUser({ email: newUser.email, isAdmin: newUser.isAdmin });
-    return true;
-  };
+            // Ավելացնել "Բոլորը" տարբերակը
+            return [{ id: 'all', label: 'Բոլորը' }, ...fetchedCategories];
+        },
+    });
 
-  const logout = () => {
-    setUser(null);
-    setCart([]);
-  };
+    // 3. CART QUERY (Կախված է user-ից)
+    const cartQuery = useQuery({
+        queryKey: ['cart', user?.user_id],
+        queryFn: () => user?.user_id ? fetchCartItems(user.user_id) : Promise.resolve([]),
+        enabled: !!user, // Բեռնել միայն այն դեպքում, եթե user-ը մուտք է գործած
+    });
 
-  const addToCart = (productId: string) => {
-    const existing = cart.find(item => item.productId === productId);
-    if (existing) {
-      setCart(cart.map(item =>
-        item.productId === productId
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
-      setCart([...cart, { productId, quantity: 1 }]);
-    }
-  };
+    // 5. CART MUTATIONS
+    const addToCartMutation = useMutation({
+        mutationFn: ({ userId, productId, quantity }: { userId: number, productId: number, quantity?: number }) => apiAddToCart(userId, productId, quantity),
+        onSuccess: () => {
+             // Թարմացնել զամբյուղը
+            queryClient.invalidateQueries({ queryKey: ['cart'] }); 
+        },
+    });
 
-  const removeFromCart = (productId: string) => {
-    setCart(cart.filter(item => item.productId !== productId));
-  };
+    const removeFromCartMutation = useMutation({
+        mutationFn: ({ userId, productId }: { userId: number, productId: number }) => apiRemoveFromCart(userId, productId),
+        onSuccess: () => {
+             // Թարմացնել զամբյուղը
+            queryClient.invalidateQueries({ queryKey: ['cart'] }); 
+        },
+    });
 
-  return (
-    <ShopContext.Provider
-      value={{
-        products,
-        addProduct,
-        deleteProduct,
+    // ՆՈՐ 6. CHECKOUT MUTATION
+    const checkoutMutation = useMutation({
+        mutationFn: (data: CheckoutBody) => checkout(data),
+        onSuccess: (data) => {
+            // Պատվերը հաջողությամբ ձևակերպելուց հետո զամբյուղը դատարկվում է
+            // Թարմացնել զամբյուղի տվյալները, որպեսզի ֆրոնտէնդը տեսնի դատարկ զամբյուղը
+            queryClient.invalidateQueries({ queryKey: ['cart'] }); 
+            
+            // Կարող եք նաև թարմացնել օգտատիրոջ պատվերների ցանկը, եթե այդպիսին կա
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+        },
+    });
+
+
+    // Օգտագործել useMemo-ն՝ performance-ը բարելավելու համար
+    const contextValue = useMemo(() => ({
+        productsQuery,
+        categoriesQuery,
+        cartQuery,
         user,
-        login,
-        register,
+        setUser,
+        loginMutation,
+        registerMutation,
         logout,
-        cart,
-        addToCart,
-        removeFromCart
-      }}
-    >
-      {children}
-    </ShopContext.Provider>
-  );
+        addToCartMutation,
+        removeFromCartMutation,
+        checkoutMutation,
+    }), [
+        productsQuery, categoriesQuery, cartQuery, 
+        user, setUser, loginMutation, registerMutation, 
+        logout, addToCartMutation, removeFromCartMutation,checkoutMutation
+    ]);
+
+
+    return (
+        <ShopContext.Provider value={contextValue}>
+            {children}
+        </ShopContext.Provider>
+    );
 };
 
 export const useShop = () => {
-  const context = useContext(ShopContext);
-  if (context === undefined) {
-    throw new Error('useShop must be used within a ShopProvider');
-  }
-  return context;
+    const context = useContext(ShopContext);
+    if (context === undefined) {
+        throw new Error('useShop must be used within a ShopProvider');
+    }
+    return context;
 };

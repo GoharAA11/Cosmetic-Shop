@@ -1,0 +1,21 @@
+// src/db.ts
+import mysql from 'mysql2/promise';
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+  port: parseInt(process.env.DB_PORT || '3306', 10), // <--- Ավելացնել սա
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+// Ֆունկցիա՝ հեշտությամբ հարցումներ կատարելու համար
+export const query = async <T>(sql: string, params: any[] = []): Promise<T> => {
+    const [rows] = await pool.execute(sql, params);
+    return rows as T;
+};
+
+export { pool };
