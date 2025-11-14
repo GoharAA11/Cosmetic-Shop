@@ -4,7 +4,7 @@ import { Product, Category, User, CartItem , AdminStats, AddProductData, Checkou
 
 // Սահմանել բեկանեդի հասցեն՝ դինամիկ development / production
 const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://cosmetic-shop-sa2n.onrender.com/api'
+  ? 'https://cosmetic-shop-api.onrender.com/api'
   : 'http://localhost:5000/api';
 
 const api = axios.create({
